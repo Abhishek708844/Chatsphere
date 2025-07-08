@@ -16,6 +16,6 @@ NODE_ENV=development
 
 npm run build
 
-#Start the app
+# Start the app
 
 npm start
