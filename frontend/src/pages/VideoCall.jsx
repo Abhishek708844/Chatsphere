@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 
 // 👇 Connect with autoConnect disabled
-const socket = io("http://localhost:5000", { autoConnect: false });
+const socket = io("https://chatsphere-1-6u5o.onrender.com", { autoConnect: false });
 
 const VideoCall = () => {
   const localVideoRef = useRef();

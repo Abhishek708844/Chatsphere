@@ -1,35 +1,57 @@
 import { Server } from "socket.io";
 import http from "http";
 import express from "express";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
 
+const allowedOrigins = [
+  "http://localhost:5173",                       // local dev
+  "https://chatsphere-1-6u5o.onrender.com"       // deployed frontend
+];
+
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:5173"],
-  },
+    origin: allowedOrigins,
+    methods: ["GET", "POST"],
+    credentials: true
+  }
 });
 
+// used to store online users: { userId: socketId }
+const userSocketMap = {};
+
+// 🔄 Util: get receiver's socket id by userId
 export function getReceiverSocketId(userId) {
   return userSocketMap[userId];
 }
 
-// used to store online users
-const userSocketMap = {}; // {userId: socketId}
-
+// 🟢 When client connects
 io.on("connection", (socket) => {
-  console.log("A user connected", socket.id);
+  console.log("✅ A user connected:", socket.id);
 
   const userId = socket.handshake.query.userId;
-  if (userId) userSocketMap[userId] = socket.id;
+  if (userId) {
+    userSocketMap[userId] = socket.id;
+  }
 
-  // io.emit() is used to send events to all the connected clients
+  // 🔁 Send online users list to all clients
   io.emit("getOnlineUsers", Object.keys(userSocketMap));
 
   socket.on("disconnect", () => {
-    console.log("A user disconnected", socket.id);
-    delete userSocketMap[userId];
+    console.log("❌ A user disconnected:", socket.id);
+
+    // Remove from userSocketMap
+    for (const id in userSocketMap) {
+      if (userSocketMap[id] === socket.id) {
+        delete userSocketMap[id];
+        break;
+      }
+    }
+
     io.emit("getOnlineUsers", Object.keys(userSocketMap));
   });
 });
