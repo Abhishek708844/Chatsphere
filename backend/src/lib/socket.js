@@ -9,27 +9,25 @@ const app = express();
 const server = http.createServer(app);
 
 const allowedOrigins = [
-  "http://localhost:5173",                       // local dev
-  "https://chatsphere-1-6u5o.onrender.com"       // deployed frontend
+  "http://localhost:5173",                      // local dev
+  "https://chatsphere-1-6u5o.onrender.com",     // your deployed frontend
 ];
 
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
     methods: ["GET", "POST"],
-    credentials: true
-  }
+    credentials: true,
+  },
 });
 
-// used to store online users: { userId: socketId }
+// Track userId → socketId
 const userSocketMap = {};
 
-// 🔄 Util: get receiver's socket id by userId
 export function getReceiverSocketId(userId) {
   return userSocketMap[userId];
 }
 
-// 🟢 When client connects
 io.on("connection", (socket) => {
   console.log("✅ A user connected:", socket.id);
 
@@ -38,13 +36,11 @@ io.on("connection", (socket) => {
     userSocketMap[userId] = socket.id;
   }
 
-  // 🔁 Send online users list to all clients
   io.emit("getOnlineUsers", Object.keys(userSocketMap));
 
   socket.on("disconnect", () => {
     console.log("❌ A user disconnected:", socket.id);
 
-    // Remove from userSocketMap
     for (const id in userSocketMap) {
       if (userSocketMap[id] === socket.id) {
         delete userSocketMap[id];
@@ -53,6 +49,23 @@ io.on("connection", (socket) => {
     }
 
     io.emit("getOnlineUsers", Object.keys(userSocketMap));
+  });
+
+  // ✅ WebRTC Signaling Events
+
+  // Step 1: Caller sends offer
+  socket.on("call-user", ({ offer, to }) => {
+    io.to(to).emit("call-made", { offer, from: socket.id });
+  });
+
+  // Step 2: Callee sends answer
+  socket.on("make-answer", ({ answer, to }) => {
+    io.to(to).emit("answer-made", { answer, from: socket.id });
+  });
+
+  // Step 3: ICE candidate exchange
+  socket.on("ice-candidate", ({ candidate, to }) => {
+    io.to(to).emit("ice-candidate", { candidate, from: socket.id });
   });
 });
 

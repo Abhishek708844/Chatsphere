@@ -1,8 +1,7 @@
-// ==== VideoCall.jsx ====
 import React, { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 
-// 👇 Connect with autoConnect disabled
+// 👇 Connect to deployed backend (same origin)
 const socket = io("https://chatsphere-1-6u5o.onrender.com", { autoConnect: false });
 
 const VideoCall = () => {
@@ -13,7 +12,6 @@ const VideoCall = () => {
   const peerConnection = useRef(null);
 
   useEffect(() => {
-    // 👇 Connect manually
     socket.connect();
 
     socket.on("connect", () => {
@@ -21,15 +19,32 @@ const VideoCall = () => {
       setMyId(socket.id);
     });
 
+    // Get user's video/audio stream
     navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((stream) => {
-      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+      }
 
-      peerConnection.current = new RTCPeerConnection();
+      // ✅ Create peer connection with STUN server
+      peerConnection.current = new RTCPeerConnection({
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" }
+        ]
+      });
 
+      // Add user's stream tracks to the peer connection
       stream.getTracks().forEach((track) => {
         peerConnection.current.addTrack(track, stream);
       });
 
+      // Handle remote stream when received
+      peerConnection.current.ontrack = (event) => {
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = event.streams[0];
+        }
+      };
+
+      // Send ICE candidates
       peerConnection.current.onicecandidate = (event) => {
         if (event.candidate) {
           socket.emit("ice-candidate", {
@@ -38,14 +53,9 @@ const VideoCall = () => {
           });
         }
       };
-
-      peerConnection.current.ontrack = (event) => {
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = event.streams[0];
-        }
-      };
     });
 
+    // Receive offer and send answer
     socket.on("call-made", async ({ offer, from }) => {
       console.log("📞 Incoming call from:", from);
       await peerConnection.current.setRemoteDescription(new RTCSessionDescription(offer));
@@ -54,15 +64,17 @@ const VideoCall = () => {
       socket.emit("make-answer", { answer, to: from });
     });
 
+    // Receive answer
     socket.on("answer-made", async ({ answer }) => {
       await peerConnection.current.setRemoteDescription(new RTCSessionDescription(answer));
     });
 
+    // Receive ICE candidate
     socket.on("ice-candidate", async ({ candidate }) => {
       try {
         await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (err) {
-        console.error("Failed to add ICE candidate", err);
+        console.error("❌ Failed to add ICE candidate", err);
       }
     });
 
